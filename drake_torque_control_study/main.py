@@ -292,7 +292,7 @@ def make_panda_limits(plant):
     # plant_limits.u = plant_limits.u.scaled(0.95)
     # plant_limits.q = plant_limits.q.scaled(np.inf)
     # plant_limits.v = plant_limits.v.scaled(np.inf)
-    # plant_limits.vd = plant_limits.vd.scaled(np.inf)
+    plant_limits.vd = plant_limits.vd.scaled(np.inf)
     # plant_limits.u = plant_limits.u.scaled(np.inf)
     return plant_limits
 
@@ -363,12 +363,6 @@ def make_controller_qp_constraints(plant, frame_W, frame_G):
         gains=make_osc_gains(),
         plant_limits=make_panda_limits(plant),
         acceleration_bounds_dt=CONTROL_DT,
-        # acceleration_bounds_dt=100 * CONTROL_DT,
-        # acceleration_bounds_dt=2 * CONTROL_DT,
-        # posture_weight=0.05,
-        # use_torque_weights=False,
-        posture_weight=1.0,
-        use_torque_weights=True,
     )
     # controller.check_limits = False
     return controller

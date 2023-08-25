@@ -435,7 +435,7 @@ def make_osqp_solver_and_options(use_dairlab_settings=False):
         # https://github.com/DAIRLab/dairlib/blob/0da42bc2/examples/Cassie/osc_run/osc_running_qp_settings.yaml
         solver_options_dict.update(
             # rho=3.0,
-            rho=0.5,
+            # rho=0.5,
             # sigma=1.0,
             # alpha=1.9,
             # sigma=100,  # er, int values messes things up?
@@ -903,8 +903,6 @@ class QpWithDirConstraint(BaseController):
         gains,
         plant_limits,
         acceleration_bounds_dt,
-        posture_weight,
-        use_torque_weights=False,
     ):
         super().__init__(plant, frame_W, frame_G)
         self.gains = gains
@@ -914,10 +912,10 @@ class QpWithDirConstraint(BaseController):
         self.context_ad = self.plant_ad.CreateDefaultContext()
 
         # Can be a bit imprecise, but w/ tuning can improve.
-        # self.solver, self.solver_options = make_osqp_solver_and_options()
+        self.solver, self.solver_options = make_osqp_solver_and_options()
 
         # Best, it seems like?
-        self.solver, self.solver_options = make_snopt_solver_and_options()
+        # self.solver, self.solver_options = make_snopt_solver_and_options()
 
         # self.solver, self.solver_options = make_clp_solver_and_options()
 
@@ -929,8 +927,7 @@ class QpWithDirConstraint(BaseController):
         # self.solver, self.solver_options = make_mosek_solver_and_options()
 
         self.acceleration_bounds_dt = acceleration_bounds_dt
-        self.posture_weight = posture_weight
-        self.use_torque_weights = use_torque_weights
+
         self.prev_sol = None
 
         self.should_save = False
@@ -1006,139 +1003,36 @@ class QpWithDirConstraint(BaseController):
         scale_vars_t = prog.NewContinuousVariables(num_scales_t, "scale_t")
         desired_scales_t = np.ones(num_scales_t)
 
-        # If True, will add (vd, tau) as decision variables, and impose
-        # dynamics and task acceleration constraints. If False, will explicitly
-        # project to torques / accelerations.
-        implicit = False
+        scale_A_p = np.ones((num_v, 1))
+        # scale_A_p = np.eye(num_v)
+        num_scales_p = scale_A_p.shape[1]
+        scale_vars_p = prog.NewContinuousVariables(num_scales_p, "scale_p")
 
-        # If True, will also scale secondary objective (posture).
-        scale_secondary = True
-
-        # For implicit formulation.
-        dup_eq_as_cost = False
-        dup_scale = 0.1
-
-        relax_primary = None
-        # relax_primary = 1.0
-        # relax_primary = 4.0
-        # relax_primary = 1e1
-        # relax_primary = 1e1
-        # relax_primary = np.array([100, 100, 100, 50, 50, 50])
-        # relax_primary = np.array([20, 20, 20, 10, 10, 10])
-        # relax_primary = 50.0
-        # relax_primary = 100.0  # OK
-        # relax_primary = 200.0  # OK
-        # relax_primary = 500.0  # maybe good?
-        # relax_primary = 1e3
-        # relax_primary = 1e4
-        # relax_primary = 1e5
-        # relax_primary = 1e6
-        relax_secondary = None
-
-        # norm_t = np.linalg.norm(edd_t_c)
-        # min_t = 5.0
-        # if norm_t < min_t:
-        #     relax_primary = 1.0
-        # print(norm_t)
-        # assert num_scales_t == 1  # HACK
-        # if norm_t < min_t:
-        #     if self.prev_dir is not None:
-        #         edd_t_c = min_t * self.prev_dir
-        #         desired_scales_t[:] = norm_t / min_t
-        # else:
-        #     dir_t = edd_t_c / norm_t
-        #     if self.should_save:
-        #         self.prev_dir = dir_t
-
-        kinematic = False
-
-        if scale_secondary:
-            scale_A_p = np.ones((num_v, 1))
-            # scale_A_p = np.eye(num_v)
-            num_scales_p = scale_A_p.shape[1]
-            scale_vars_p = prog.NewContinuousVariables(num_scales_p, "scale_p")
-
-        if relax_primary is not None:
-            relax_vars_t = prog.NewContinuousVariables(num_t, "task.relax")
-            relax_cost_t = np.ones(num_t) * relax_primary
-            relax_proj_t = np.diag(relax_cost_t)
-        if relax_secondary is not None:
-            relax_vars_p = prog.NewContinuousVariables(num_v, "q relax")
-
-        assert self.use_torque_weights
         proj_t = Jt.T @ Mt
         proj_p = Nt_T @ M
-        # proj_p = Nt_T
 
-        if implicit:
-            vd_star = prog.NewContinuousVariables(self.num_q, "vd_star")
-            u_star = prog.NewContinuousVariables(self.num_q, "u_star")
+        # Primary, scale.
+        u_vars = scale_vars_t
+        Au_t = proj_t @ np.diag(edd_t_c) @ scale_A_t
+        bu_t = -proj_t @ Jtdot_v + H
 
-            # Dynamics constraint.
-            dyn_vars = np.concatenate([vd_star, u_star])
-            dyn_A = np.hstack([M, -Iv])
-            dyn_b = -H
-            prog.AddLinearEqualityConstraint(
-                dyn_A, dyn_b, dyn_vars
-            ).evaluator().set_description("dyn")
+        u_vars = np.concatenate([u_vars, scale_vars_p])
+        Au_p = proj_p @ np.diag(edd_p_c) @ scale_A_p
+        bu_p = np.zeros(num_v)
 
-            u_vars = u_star
-            Au = np.eye(num_v)
-            bu = np.zeros(num_v)
-            vd_vars = vd_star
-            Avd = np.eye(num_v)
-            bvd = np.zeros(num_v)
-        else:
-            # Primary, scale.
-            u_vars = scale_vars_t
-            Au = proj_t @ np.diag(edd_t_c) @ scale_A_t
-            bu = -proj_t @ Jtdot_v + H
+        Au = np.hstack([Au_t, Au_p])
+        bu = H + bu_t + bu_p
 
-            if scale_secondary:
-                Au_p = proj_p @ np.diag(edd_p_c) @ scale_A_p
-                u_vars = np.concatenate([u_vars, scale_vars_p])
-                Au = np.hstack([Au, Au_p])
-            else:
-                bu += proj_p @ edd_p_c
-
-            if relax_primary is not None:
-                Au_rt = proj_t
-                u_vars = np.concatenate([u_vars, relax_vars_t])
-                Au = np.hstack([Au, Au_rt])
-                prog.Add2NormSquaredCost(
-                    relax_proj_t,
-                    np.zeros(num_t),
-                    relax_vars_t,
-                )
-                # add_2norm_decoupled(
-                #     prog,
-                #     relax_cost_t,
-                #     np.zeros(num_t),
-                #     relax_vars_t,
-                # )
-            assert relax_secondary is None
-
-            # Acceleration is just affine transform.
-            vd_vars = u_vars
-            Avd = Minv @ Au
-            bvd = Minv @ (bu - H)
+        vd_vars = u_vars
+        Avd = Minv @ Au
+        bvd = Minv @ (bu - H)
 
         # Add limits.
         vd_limits = self.plant_limits.vd
-        # TODO(eric.cousineau): How to make this work correctly? Even
-        # conservative estimate?
-        torque_direct = True
-        if torque_direct:
-            u_vars = u_vars
-        else:
-            u_vars = None
-            vd_tau_limits = vd_limits_from_tau(self.plant_limits.u, Minv, H)
-            vd_limits = vd_limits.intersection(vd_tau_limits)
-        dt = self.acceleration_bounds_dt  # HACK
         limit_info = add_plant_limits_to_qp(
             plant_limits=self.plant_limits,
             vd_limits=vd_limits,
-            dt=dt,
+            dt=self.acceleration_bounds_dt,
             q=q,
             v=v,
             prog=prog,
@@ -1150,130 +1044,7 @@ class QpWithDirConstraint(BaseController):
             bu=bu,
         )
 
-        add_manip_cbf = False
-
-        if add_manip_cbf:
-            # mu_min = 0.005
-            mu_min = 0.001
-            mu, Jmu = calc_manip_index(
-                self.plant,
-                self.context,
-                self.frame_W,
-                self.frame_G,
-                self.plant_ad,
-                self.context_ad,
-            )
-            if self.Jmu_prev is None:
-                self.Jmu_prev = Jmu
-            Jmudot = (Jmu - self.Jmu_prev) / dt
-            self.Jmu_prev = Jmu
-            Jmudot_v = Jmudot @ v
-            amu_1 = lambda x: x
-            amu_2 = amu_1
-            kmu_1 = 2 / (dt * dt)
-            kmu_2 = 2 / dt
-
-            kmu_1 /= 5**2  # for high feedback gain
-            # kmu_1 /= 10**2  # for low feedback gain
-            kmu_2 /= 5
-
-            h_mu = mu - mu_min
-            hd_mu = Jmu @ v
-            # hdd = J*vd + Jd_v >= -∑ Kᵢ h⁽ⁱ⁾
-            Amu = Jmu @ Avd
-            bmu = (
-                -Jmudot_v
-                -Jmu @ bvd
-                -kmu_1 * amu_1(h_mu)
-                -kmu_2 * amu_2(hd_mu)
-            )
-            prog.AddLinearConstraint(
-                [Amu],
-                [bmu],
-                [np.inf],
-                vd_vars,
-            ).evaluator().set_description("manip cbf")
-
-        # if implicit:
-        #     # prog.AddBoundingBoxConstraint(
-        #     #     self.plant_limits.u.lower,
-        #     #     self.plant_limits.u.upper,
-        #     #     u_star,
-        #     # ).evaluator().set_description("u direct")
-        #     prog.AddBoundingBoxConstraint(
-        #         vd_tau_limits.lower,
-        #         vd_tau_limits.upper,
-        #         vd_star,
-        #     ).evaluator().set_description("u via vd")
-        # else:
-        #     # u_min, u_max = self.plant_limits.u
-        #     # prog.AddLinearConstraint(
-        #     #     Au,
-        #     #     u_min - bu,
-        #     #     u_max - bu,
-        #     #     vd_vars,
-        #     # ).evaluator().set_description("u direct")
-        #     vd_min, vd_max = vd_tau_limits
-        #     prog.AddLinearConstraint(
-        #         Avd,
-        #         vd_min - bvd,
-        #         vd_max - bvd,
-        #         vd_vars,
-        #     ).evaluator().set_description("u via vd")
-
-        # TODO(eric.cousineau): Add CBF on manip index.
-
-        if kinematic:
-            Jtpinv = np.linalg.pinv(Jt)
-            Nt_T = Iv - Jtpinv @ Jt
-
-        # print(np.linalg.matrix_rank(Jt))
-        # print(np.linalg.matrix_rank(Nt_T))
-
-        # Constrain along desired tracking, J*vdot + Jdot*v = s*edd_c
-        # For simplicity, allow each direction to have its own scaling.
-
-        if implicit:
-            task_vars_t = np.concatenate([vd_star, scale_vars_t])
-            task_bias_t = edd_t_c
-            task_A_t = np.hstack([Jt, -np.diag(task_bias_t) @ scale_A_t])
-            task_b_t = -Jtdot_v
-
-            if relax_primary is not None:
-                task_vars_t = np.concatenate([task_vars_t, relax_vars_t])
-                task_A_t = np.hstack([task_A_t, -It])
-                # proj = proj_t
-                if kinematic:
-                    relax_proj_t = Jtpinv @ proj
-                prog.Add2NormSquaredCost(
-                    relax_proj_t @ It,
-                    relax_proj_t @ np.zeros(num_t),
-                    relax_vars_t,
-                )
-
-            prog.AddLinearEqualityConstraint(
-                task_A_t, task_b_t, task_vars_t
-            ).evaluator().set_description("task")
-
-            if dup_eq_as_cost:
-                prog.Add2NormSquaredCost(
-                    dup_scale * task_A_t, dup_scale * task_b_t, task_vars_t
-                )
-
-        # Try to optimize towards scale=1.
-        # proj = Jt.T @ Mt @ scale_A
-        # proj = Mt @ scale_A
-        # proj = scale_A
-        # import pdb; pdb.set_trace()
-        # proj *= 10
-        # proj = proj * np.sqrt(num_scales)
-
-        # proj = np.eye(num_scales_t)
-        # prog.Add2NormSquaredCost(
-        #     proj @ np.eye(num_scales_t),
-        #     proj @ desired_scales_t,
-        #     scale_vars_t,
-        # )
+        # Optimize towards scale=1.
         add_2norm_decoupled(
             prog,
             np.ones(num_scales_t),
@@ -1281,84 +1052,13 @@ class QpWithDirConstraint(BaseController):
             scale_vars_t,
         )
 
-        # TODO(eric.cousineau): Maybe I need to constrain these error dynamics?
-
-        # weight = self.posture_weight
-        # task_proj = weight * task_proj
-        # task_A = task_proj @ Iv
-        # task_b = task_proj @ edd_c
-        # prog.Add2NormSquaredCost(task_A, task_b, vd_star)
-
-        if implicit:
-            if not scale_secondary:
-                assert not dup_eq_as_cost
-                task_A_p = proj_p
-                task_b_p = proj_p @ edd_p_c
-                prog.AddLinearEqualityConstraint(
-                    task_A_p, task_b_p, vd_star,
-                ).evaluator().set_description("posture")
-            else:
-                task_bias_p = edd_p_c
-                # task_bias_rep = np.tile(edd_c, (num_scales, 1)).T
-                task_vars_p = np.concatenate([vd_star, scale_vars_p])
-                task_A_p = np.hstack([Iv, -np.diag(task_bias_p) @ scale_A_p])
-                task_b_p = np.zeros(num_v)
-                # TODO(eric.cousineau): Weigh penalty based on how much feedback we
-                # need?
-                if relax_secondary is not None:
-                    task_vars_p = np.concatenate([task_vars_p, relax_vars_p])
-                    task_A_p = np.hstack([task_A_p, -Iv])
-                    proj = proj_p
-                    prog.Add2NormSquaredCost(
-                        relax_secondary * proj @ Iv,
-                        proj @ np.zeros(num_v),
-                        relax_secondary,
-                    )
-                task_A_p = proj_p @ task_A_p
-                task_b_p = proj_p @ task_b_p
-                prog.AddLinearEqualityConstraint(
-                    task_A_p, task_b_p, task_vars_p,
-                ).evaluator().set_description("posture")
-                if dup_eq_as_cost:
-                    prog.Add2NormSquaredCost(
-                        dup_scale * task_A_p, dup_scale * task_b_p, task_vars_p,
-                    )
-
-        if scale_secondary:
-            desired_scales_p = np.ones(num_scales_p)
-            # proj = self.posture_weight * np.eye(num_scales_p)
-            # # proj = self.posture_weight * task_proj @ scale_A
-            # # proj = self.posture_weight * scale_A
-            # # proj = proj #/ np.sqrt(num_scales)
-            # prog.Add2NormSquaredCost(
-            #     proj @ np.eye(num_scales_p),
-            #     proj @ desired_scales_p,
-            #     scale_vars_p,
-            # )
-            add_2norm_decoupled(
-                prog,
-                self.posture_weight * np.ones(num_scales_p),
-                self.posture_weight * desired_scales_p,
-                scale_vars_p,
-            )
-
-        # ones = np.ones(num_scales_t)
-        # prog.AddBoundingBoxConstraint(
-        #     -10.0 * ones,
-        #     10.0 * ones,
-        #     scale_vars_t,
-        # )
-        # if scale_secondary:
-        #     ones = np.ones(num_scales_p)
-        #     prog.AddBoundingBoxConstraint(
-        #         -10.0 * ones,
-        #         10.0 * ones,
-        #         scale_vars_p,
-        #     )
-
-        # print(f"edd_t_c: {edd_t_c}")
-        # if scale_secondary:
-        #     print(f"  edd_p_c: {edd_p_c}")
+        desired_scales_p = np.ones(num_scales_p)
+        add_2norm_decoupled(
+            prog,
+            np.ones(num_scales_p),
+            desired_scales_p,
+            scale_vars_p,
+        )
 
         # Solve.
         try:
@@ -1369,65 +1069,21 @@ class QpWithDirConstraint(BaseController):
                 self.solver, self.solver_options, prog, x0=self.prev_sol
             )
         except RuntimeError:
-            # print(np.rad2deg(self.plant_limits.q.lower))
-            # print(np.rad2deg(self.plant_limits.q.upper))
-            # print(np.rad2deg(q))
-            # print(self.plant_limits.v)
-            # print(v)
             raise
 
-        if implicit:
-            # tol = 1e-3
-            # tol = 1e-12  # snopt default
-            # tol = 1e-10  # snopt, singular
-            tol = 1e-6
-            # tol = 1e-11  # osqp default
-            # tol = 1e-3  # scs default
-        else:
-            # tol = 1e-14  # osqp, clp default
-            # tol = 0  # gurobi default
-            # tol = 1e-14  # snopt default
-            # tol = 1e-10  # snopt, singular
-            # tol = 1e-8
-            # tol = 1e-4
-            # tol = 1e-14  # scs - primal infeasible, dual unbounded?
-            # tol = 1e-11  # mosek default
-            tol = 1e-1  # HACK
-
-
+        tol = 1e-5
         scale_t = result.GetSolution(scale_vars_t)
-
-        # print(v)
-        # print(f"scale t: {scale_t}")
-        if relax_primary is not None:
-            relax_t = result.GetSolution(relax_vars_t)
-            # print(f"  relax: {relax_t}")
-        else:
-            relax_t = np.zeros(num_t)
-        if scale_secondary:
-            scale_p = result.GetSolution(scale_vars_p)
-            # print(f"scale p: {scale_p}")
-        if relax_secondary is not None:
-            relax_p = result.GetSolution(relax_vars_p)
-            # print(f"  relax: {relax_p}")
-        # print("---")
+        scale_p = result.GetSolution(scale_vars_p)
 
         infeas = result.GetInfeasibleConstraintNames(prog, tol=tol)
         infeas_text = "\n" + indent("\n".join(infeas), "  ")
         assert len(infeas) == 0, infeas_text
         self.prev_sol = result.get_x_val()
 
-        if implicit:
-            tau = result.GetSolution(u_star)
-        else:
-            u_mul = scale_t
-            if scale_secondary:
-                u_mul = np.concatenate([u_mul, scale_p])
-            if relax_primary is not None:
-                u_mul = np.concatenate([u_mul, relax_t])
-            tau = Au @ u_mul + bu
+        u_mul = result.GetSolution(u_vars)
+        tau = Au @ u_mul + bu
 
-        tau = self.plant_limits.u.saturate(tau)
+        # tau = self.plant_limits.u.saturate(tau)
 
         # import pdb; pdb.set_trace()
 
@@ -1441,11 +1097,10 @@ class QpWithDirConstraint(BaseController):
             self.us.append(tau)
             self.edd_ts.append(edd_t_c)
             self.s_ts.append(scale_t)
-            self.r_ts.append(relax_t)
+            # self.r_ts.append(relax_t)
             self.edd_ps.append(edd_p_c)
             self.edd_ps_null.append(edd_c_p_null)
-            if scale_secondary:
-                self.s_ps.append(scale_p)
+            self.s_ps.append(scale_p)
             self.limits_infos.append(limit_info)
             self.sigmas.append(sigmas)
 
