@@ -782,24 +782,24 @@ class QpWithCosts(BaseController):
 
         num_t = 6
         It = np.eye(num_t)
-        if False:  # self.use_torque_weights:
+        if self.use_torque_weights:
             # task_proj = Jt.T @ Mt
             task_proj = Mt
         else:
             task_proj = It
         task_A = task_proj @ task_A
         task_b = task_proj @ task_b
-        # if self.split_costs is None:
-        # prog.Add2NormSquaredCost(task_A, task_b, vd_star)
-        add_2norm_row_decoupled(prog, task_A, task_b, vd_star)
-        # else:
-        #     slices = [slice(0, 3), slice(3, 6)]
-        #     for weight_i, slice_i in zip(self.split_costs, slices):
-        #         prog.Add2NormSquaredCost(
-        #             weight_i * task_A[slice_i],
-        #             weight_i* task_b[slice_i],
-        #             vd_star,
-        #         )
+        # add_2norm_row_decoupled(prog, task_A, task_b, vd_star)
+        if self.split_costs is None:
+            prog.Add2NormSquaredCost(task_A, task_b, vd_star)
+        else:
+            slices = [slice(0, 3), slice(3, 6)]
+            for weight_i, slice_i in zip(self.split_costs, slices):
+                prog.Add2NormSquaredCost(
+                    weight_i * task_A[slice_i],
+                    weight_i* task_b[slice_i],
+                    vd_star,
+                )
 
         # Compute posture feedback.
         gains_p = self.gains.posture
@@ -808,14 +808,14 @@ class QpWithCosts(BaseController):
         edd_c = -gains_p.kp * e - gains_p.kd * ed
         # Same as above, but lower weight.
         weight = self.posture_weight
-        if False:  # self.use_torque_weights:
+        if self.use_torque_weights:
             task_proj = weight * Nt_T
         else:
             task_proj = weight * Iv
         task_A = task_proj
         task_b = task_proj @ edd_c
-        # prog.Add2NormSquaredCost(task_A, task_b, vd_star)
-        add_2norm_row_decoupled(prog, task_A, task_b, vd_star)
+        prog.Add2NormSquaredCost(task_A, task_b, vd_star)
+        # add_2norm_row_decoupled(prog, task_A, task_b, vd_star)
 
         # Solve.
         result = solve_or_die(self.solver, self.solver_options, prog)
@@ -914,10 +914,10 @@ class QpWithDirConstraint(BaseController):
         self.context_ad = self.plant_ad.CreateDefaultContext()
 
         # Can be a bit imprecise, but w/ tuning can improve.
-        self.solver, self.solver_options = make_osqp_solver_and_options()
+        # self.solver, self.solver_options = make_osqp_solver_and_options()
 
         # Best, it seems like?
-        # self.solver, self.solver_options = make_snopt_solver_and_options()
+        self.solver, self.solver_options = make_snopt_solver_and_options()
 
         # self.solver, self.solver_options = make_clp_solver_and_options()
 
@@ -988,7 +988,7 @@ class QpWithDirConstraint(BaseController):
 
         num_t = 6
 
-        # # *very* sloppy looking
+        # *very* sloppy looking
         # scale_A_t = np.eye(num_t)
 
         # # better, but may need relaxation
@@ -1150,7 +1150,7 @@ class QpWithDirConstraint(BaseController):
             bu=bu,
         )
 
-        add_manip_cbf = False
+        add_manip_cbf = True
 
         if add_manip_cbf:
             # mu_min = 0.005
@@ -1183,7 +1183,7 @@ class QpWithDirConstraint(BaseController):
             Amu = Jmu @ Avd
             bmu = (
                 -Jmudot_v
-                -Jmu @ bvd
+                # -Jmu @ bvd
                 -kmu_1 * amu_1(h_mu)
                 -kmu_2 * amu_2(hd_mu)
             )
@@ -1388,11 +1388,11 @@ class QpWithDirConstraint(BaseController):
             # tol = 0  # gurobi default
             # tol = 1e-14  # snopt default
             # tol = 1e-10  # snopt, singular
-            tol = 1e-8
+            # tol = 1e-8
             # tol = 1e-4
             # tol = 1e-14  # scs - primal infeasible, dual unbounded?
             # tol = 1e-11  # mosek default
-            # tol = 1e-1  # HACK
+            tol = 1e-1  # HACK
 
 
         scale_t = result.GetSolution(scale_vars_t)

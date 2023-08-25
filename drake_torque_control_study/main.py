@@ -69,10 +69,10 @@ def run_control(
     frame_W = plant.world_frame()
 
     builder = DiagramBuilder()
-    access = DirectPlant.AddToBuilder(builder, plant_diagram, plant)
-    # access = EulerAccelPlant.AddToBuilder(
-    #     builder, plant_diagram, plant, CONTROL_DT
-    # )
+    # access = DirectPlant.AddToBuilder(builder, plant_diagram, plant)
+    access = EulerAccelPlant.AddToBuilder(
+        builder, plant_diagram, plant, CONTROL_DT
+    )
 
     controller = builder.AddSystem(
         make_controller(plant, frame_W, frame_G)
@@ -90,7 +90,7 @@ def run_control(
     )
 
     # Simplify plant after controller is constructed.
-    simplify_plant(plant, scene_graph)
+    # simplify_plant(plant, scene_graph)
 
     def log_instant(log_context):
         context = access.read_plant_context(diagram_context)
@@ -244,18 +244,18 @@ def run_fast_waypoints_x(make_controller):
 
 def make_osc_gains():
     # return OscGains.via_damping_ratio(10.0, 0.0)  # like diff ik
-    return OscGains(
-        # task=Gains.via_damping_ratio(10.0),
-        task=Gains.via_damping_ratio(10.0, ratio=0.3),
-        # stability is noted for teleop trajectory case...
-        # posture=Gains(kp=100.0, kd=20.0),  # unstable (towards end)
-        posture=Gains.via_damping_ratio(kp=10.0),
-        # posture=Gains(kp=0.0, kd=20.0),  # stable
-        # posture=Gains(kp=-100.0, kd=20.0),  # stable?!!!
-        # posture=Gains(kp=-100.0, kd=-20.0),  # unstable
-        # posture=Gains(kp=0.0, kd=-20.0),  # unstable
-        # posture=Gains(kp=100.0, kd=-20.0),  # unstable
-    )
+    # return OscGains(
+    #     # task=Gains.via_damping_ratio(10.0),
+    #     task=Gains.via_damping_ratio(10.0, ratio=0.3),
+    #     # stability is noted for teleop trajectory case...
+    #     # posture=Gains(kp=100.0, kd=20.0),  # unstable (towards end)
+    #     posture=Gains.via_damping_ratio(kp=10.0),
+    #     # posture=Gains(kp=0.0, kd=20.0),  # stable
+    #     # posture=Gains(kp=-100.0, kd=20.0),  # stable?!!!
+    #     # posture=Gains(kp=-100.0, kd=-20.0),  # unstable
+    #     # posture=Gains(kp=0.0, kd=-20.0),  # unstable
+    #     # posture=Gains(kp=100.0, kd=-20.0),  # unstable
+    # )
     # return OscGains.via_damping_ratio(10.0, 100.0)  # goes crazy
 
     # return OscGains.via_damping_ratio(1.0, 1.0)
@@ -264,7 +264,7 @@ def make_osc_gains():
     # return OscGains.via_damping_ratio(100.0, 100.0)
     # return OscGains.via_damping_ratio(100.0, 10.0)
     # return OscGains.via_damping_ratio(150.0, 15.0)
-    # return OscGains.via_damping_ratio(300.0, 30.0)
+    return OscGains.via_damping_ratio(300.0, 30.0)
     # return OscGains.via_damping_ratio(100.0, 1.0)  # Drifts... hard...
     # return OscGains.via_damping_ratio(100.0, 0.0)  # of course locks
 
@@ -280,7 +280,7 @@ def make_panda_limits(plant):
     # plant_limits.q.upper[3] = np.deg2rad(-20.0)  # vibrates, locks
     # plant_limits.q.upper[3] = np.deg2rad(-25.0)  # vibrates
     # plant_limits.q.upper[3] = np.deg2rad(-30.0)
-    plant_limits.q.upper[3] = np.deg2rad(-35.0)  # near singular value=0.01
+    # plant_limits.q.upper[3] = np.deg2rad(-35.0)  # near singular value=0.01
     # plant_limits.q.upper[3] = np.deg2rad(-45.0)
     # plant_limits.q.lower[6] = np.deg2rad(-30.0)
     # plant_limits.q.upper[6] = np.deg2rad(30.0)
@@ -426,10 +426,10 @@ def run_teleop_traj(make_controller):
 def scenario_main():
     scenarios = {
         # "slow": run_slow_waypoints,
-        "rot": run_rotation_coupling,
+        # "rot": run_rotation_coupling,
         # "fast": run_fast_waypoints,
         # "teleop": run_teleop_traj,
-        "fast x": run_fast_waypoints_x,
+        # "fast x": run_fast_waypoints_x,
         "fast singular": partial(run_fast_waypoints_singular, rotate=False),
         "fast singular rot": partial(run_fast_waypoints_singular, rotate=True),
     }
