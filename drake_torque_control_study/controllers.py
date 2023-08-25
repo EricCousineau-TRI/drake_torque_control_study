@@ -365,9 +365,9 @@ class Osc(BaseController):
         # Compute posture feedback.
         e_p = q - q0
         e_p_orig = e_p.copy()
-        # TODO(eric.cousineau): Find more prinicipled setup?
+        # # TODO(eric.cousineau): Find more prinicipled setup?
         e_p_dir = vec_dot_norm(e_p, Nt @ e_p)
-        e_p *= e_p_dir  # seems ok
+        # e_p *= e_p_dir  # seems ok
         # e_p = Nt_kin @ e_p  # decent, but more null-space error
         # e_p = Nt @ e_p  # doesn't help failing case
         # e_p_dir = vec_dot_norm(Nt_kin @ e_p, Nt @ e_p)  # very... discrete?
@@ -687,16 +687,8 @@ class QpWithCosts(BaseController):
         ).evaluator().set_description("dyn")
 
         # Add limits.
-        vd_limits = self.plant_limits.vd
-        # vd_limits = intersect_vd_limits(
-        #     self.plant_limits,
-        #     Minv,
-        #     C,
-        #     tau_g,
-        # )
         add_plant_limits_to_qp(
             plant_limits=self.plant_limits,
-            vd_limits=vd_limits,
             dt=self.acceleration_bounds_dt,
             q=q,
             v=v,
@@ -853,9 +845,6 @@ class QpWithDirConstraint(BaseController):
         self.gains = gains
         self.plant_limits = plant_limits
 
-        self.plant_ad = self.plant.ToAutoDiffXd()
-        self.context_ad = self.plant_ad.CreateDefaultContext()
-
         # Can be a bit imprecise, but w/ tuning can improve.
         self.solver, self.solver_options = make_osqp_solver_and_options()
 
@@ -948,7 +937,6 @@ class QpWithDirConstraint(BaseController):
         proj_t = Jt.T @ Mt
         proj_p = Nt_T @ M
 
-        # Primary, scale.
         u_vars = scale_vars_t
         Au_t = proj_t @ np.diag(edd_t_c) @ scale_A_t
         bu_t = -proj_t @ Jtdot_v
