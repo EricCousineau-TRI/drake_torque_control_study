@@ -495,18 +495,39 @@ def make_scs_solver_and_options():
     return solver, solver_options
 
 
-def solve_or_die(solver, solver_options, prog, *, x0=None):
+def solve_or_die(solver, solver_options, prog, *, tol, x0=None):
+    """
+    Solves a program; if it does not report success, or if solution
+    constraints violate beyond a specified tolerance, it will re-solve the
+    problem with some additional debug information enabled.
+    """
     result = solver.Solve(
         prog, solver_options=solver_options, initial_guess=x0
     )
-    if not result.is_success():
-        solver_options.SetOption(
-            CommonSolverOption.kPrintToConsole, True
-        )
-        solver.Solve(prog, solver_options=solver_options)
-        print("\n".join(result.GetInfeasibleConstraintNames(prog)))
+    infeasible = result.GetInfeasibleConstraintNames(prog, tol=tol)
+    if not result.is_success() or len(infeasible) > 0:
+        # TODO(eric.cousineau): Print out max violation.
+        print(f"Infeasible constraints per Drake for tol={tol}:")
+        print("\n".join(infeasible))
+        print()
+        print("Re-solving with verbose output")
+        # TODO(eric.cousineau): Copy solver_options to avoid extra mutation.
+        is_snopt = solver.solver_id() == SnoptSolver.id()
+        snopt_file = "/tmp/snopt.out"
+        if is_snopt:
+            solver_options.SetOption(
+                CommonSolverOption.kPrintFileName, snopt_file
+            )
+            with open(snopt_file, "w") as f:
+                f.write("")
+        else:
+            solver_options.SetOption(CommonSolverOption.kPrintToConsole, True)
+        result = solver.Solve(prog, solver_options=solver_options)
+        if is_snopt:
+            with open(snopt_file, "r") as f:
+                print(f.read())
         print(result.get_solution_result())
-        raise RuntimeError("Bad solution")
+        raise RuntimeError("Solver reports failure")
     return result
 
 
@@ -755,7 +776,7 @@ class QpWithCosts(BaseController):
         # add_2norm_row_decoupled(prog, task_A, task_b, vd_star)
 
         # Solve.
-        result = solve_or_die(self.solver, self.solver_options, prog)
+        result = solve_or_die(self.solver, self.solver_options, prog, tol=1e-5)
         tau = result.GetSolution(u_star)
 
         return tau
@@ -984,15 +1005,10 @@ class QpWithDirConstraint(BaseController):
         )
 
         # Solve.
-        result = solve_or_die(
-            self.solver, self.solver_options, prog, x0=self.prev_sol
-        )
-
         tol = 1e-5
-
-        infeas = result.GetInfeasibleConstraintNames(prog, tol=tol)
-        infeas_text = "\n" + indent("\n".join(infeas), "  ")
-        assert len(infeas) == 0, infeas_text
+        result = solve_or_die(
+            self.solver, self.solver_options, prog, tol=tol, x0=self.prev_sol
+        )
         self.prev_sol = result.get_x_val()
 
         u_mul = result.GetSolution(u_vars)
