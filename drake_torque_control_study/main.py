@@ -420,10 +420,10 @@ def run_teleop_traj(make_controller):
 def scenario_main():
     scenarios = {
         # "slow": run_slow_waypoints,
-        # "rot": run_rotation_coupling,
-        # "fast": run_fast_waypoints,
+        "rot": run_rotation_coupling,
+        "fast": run_fast_waypoints,
         # "teleop": run_teleop_traj,
-        # "fast x": run_fast_waypoints_x,
+        "fast x": run_fast_waypoints_x,
         "fast singular": partial(run_fast_waypoints_singular, rotate=False),
         "fast singular rot": partial(run_fast_waypoints_singular, rotate=True),
     }

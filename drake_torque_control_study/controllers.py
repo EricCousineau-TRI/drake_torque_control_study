@@ -867,10 +867,10 @@ class QpWithDirConstraint(BaseController):
         self.plant_limits = plant_limits
 
         # Can be a bit imprecise, but w/ tuning can improve.
-        self.solver, self.solver_options = make_osqp_solver_and_options()
+        # self.solver, self.solver_options = make_osqp_solver_and_options()
 
         # Best, it seems like?
-        # self.solver, self.solver_options = make_snopt_solver_and_options()
+        self.solver, self.solver_options = make_snopt_solver_and_options()
 
         # self.solver, self.solver_options = make_clp_solver_and_options()
 
@@ -936,16 +936,16 @@ class QpWithDirConstraint(BaseController):
         edd_p_c = -kp_p * e_p - kd_p * ed_p
 
         # *very* sloppy looking
-        scale_A_t = np.eye(num_t)
+        # scale_A_t = np.eye(num_t)
         # # better, but may need relaxation
         # scale_A_t = np.ones((num_t, 1))
         # can seem "loose" towards end of traj for rotation
         # (small feedback -> scale a lot). relaxing only necessary for
         # implicit version.
-        # scale_A_t = np.array([
-        #     [1, 1, 1, 0, 0, 0],
-        #     [0, 0, 0, 1, 1, 1],
-        # ]).T
+        scale_A_t = np.array([
+            [1, 1, 1, 0, 0, 0],
+            [0, 0, 0, 1, 1, 1],
+        ]).T
 
         num_scales_t = scale_A_t.shape[1]
         scale_vars_t = prog.NewContinuousVariables(num_scales_t, "scale_t")
