@@ -531,99 +531,51 @@ def vd_limits_from_tau(u_limits, Minv, H):
 def add_plant_limits_to_qp(
     *,
     plant_limits,
-    vd_limits,
     dt,
     q,
     v,
     prog,
-    vd_vars,
-    Avd,
-    bvd,
-    u_vars,
     Au,
     bu,
+    u_vars,
+    Avd,
+    bvd,
+    vd_vars,
 ):
-    # mode = "naive"
-    mode = "cbf"
-    # mode = "intersect"
+    num_v = len(v)
+    Iv = np.eye(num_v)
 
-    if mode == "naive":
-        # v_next = v + dt*vd = Av*vd + bv
-        # Av = dt * Avd
-        # bv = v
-        # v_rescale = 1 / dt
-        Av = Avd
-        v_to_vd = 1 / dt
-        bv = v_to_vd * v
-        # q_next = q + dt*v + 1/2*dt^2*vd = Aq*vd + bq
-        # Aq = 0.5 * dt * dt * Avd
-        # bq = q + dt * v
-        # q_rescale = 1 / dt  # 2 / (dt * dt)
-        Aq = Avd
-        q_to_vd = 2 / (dt * dt)
-        bq = q_to_vd * q + 2 / dt * v
+    # Rescale gains.
+    # TODO(eric.cousineau): Have alpha functions modulate gains closer
+    # to boundary.
+    # TODO(eric.cousineau): Make this configurable.
+    # WARNING: These are sensitive to primary tracking gains :(
+    q_dt_scale = 25
+    v_dt_scale = 10
 
-        if plant_limits.q.any_finite():
-            q_min, q_max = plant_limits.q
-            prog.AddLinearConstraint(
-                Avd,
-                q_to_vd * q_min - bq,
-                q_to_vd * q_max - bq,
-                vd_vars,
-            ).evaluator().set_description("pos")
+    # CBF-esque formulation.
+    # WARNING: This is not a certificate-based barrier function, thus it
+    # may lead to non-forward invariant behavior (e.g. one time-step is
+    # feasible, the next time-step is not). Note that gain tuning is
+    # something that will happen here.
 
-        if plant_limits.v.any_finite():
-            v_min, v_max = plant_limits.v
-            prog.AddLinearConstraint(
-                Avd,
-                v_to_vd * v_min - bv,
-                v_to_vd * v_max - bv,
-                vd_vars,
-            ).evaluator().set_description("vel")
-    elif mode == "cbf":
+    # N.B. Nominal CBFs (c*vd >= b) are lower bounds. For CBFs where c=-1,
+    # we can pose those as upper bounds (vd <= -b).
+
+    # Goal: h >= 0 for all admissible states
+    # hdd = c*vd >= -k_1*h -k_2*hd = b
+
+    if plant_limits.q.any_finite():
         q_min, q_max = plant_limits.q
-        v_min, v_max = plant_limits.v
-
-        num_v = len(v)
-        Iv = np.eye(num_v)
-
-        # CBF formulation.
-        # Goal: h >= 0 for all admissible states
-        # hdd = c*vd >= -k_1*h -k_2*hd = b
 
         # Gains corresponding to naive formulation.
         aq_1 = lambda x: x
         aq_2 = aq_1
-        av_1 = lambda x: x
         kq_1 = 2 / (dt * dt)
         kq_2 = 2 / dt
-        kv_1 = 1 / dt
-
-        q_dt_scale = 20
-        v_dt_scale = 10
+        # Rescale.
         kq_1 /= q_dt_scale**2
-        # kq_2 /= dt_scale / 5  # why? helps for discrete case
         kq_2 /= v_dt_scale
-        kv_1 /= v_dt_scale
-        # kv_1 /= dt_scale
-
-        # kq_1 /= 400
-        # kq_2 /= 20
-        # kv_1 /= 20
-
-        # TODO(eric.cousineau): Have alpha functions modulate gains closer
-        # to boundary.
-
-        # # Hacks
-        # # kq_1 /= 100
-        # # kq_2 /= 10
-        # # kv_1 /= 10
-        # kq_1 = 100
-        # # kq_1 = 75
-        # # kq_1 = 50
-        # kq_2 = 50
-        # kv_1 = 10
-        # # kv_1 = 2
 
         # q_min
         h_q_min = q - q_min
@@ -635,6 +587,23 @@ def add_plant_limits_to_qp(
         hd_q_max = -v
         c_q_max = -1
         b_q_max = -kq_1 * aq_1(h_q_max) - kq_2 * aq_2(hd_q_max)
+
+        prog.AddLinearConstraint(
+            Avd,
+            b_q_min - bvd,
+            -b_q_max - bvd,
+            vd_vars,
+        ).evaluator().set_description("pos cbf ish")
+
+    if plant_limits.v.any_finite():
+        v_min, v_max = plant_limits.v
+
+        # Gains corresponding to naive formulation.
+        av_1 = lambda x: x
+        kv_1 = 1 / dt
+        # Rescale.
+        kv_1 /= v_dt_scale
+
         # v_min
         h_v_min = v - v_min
         c_v_min = 1
@@ -644,38 +613,15 @@ def add_plant_limits_to_qp(
         c_v_max = -1
         b_v_max = -kv_1 * av_1(h_v_max)
 
-        # Add constraints.
-        # N.B. Nominal CBFs (c*vd >= b) are lower bounds. For CBFs where c=-1,
-        # we can pose those as upper bounds (vd <= -b).
-        prog.AddLinearConstraint(
-            Avd,
-            b_q_min - bvd,
-            -b_q_max - bvd,
-            vd_vars,
-        ).evaluator().set_description("pos cbf")
         prog.AddLinearConstraint(
             Avd,
             b_v_min - bvd,
             -b_v_max - bvd,
             vd_vars,
-        ).evaluator().set_description("vel cbf")
-    elif mode == "intersect":
-        vd_limits = compute_acceleration_bounds(
-            q=q,
-            v=v,
-            plant_limits=plant_limits,
-            dt=dt,
-            vd_limits_nominal=vd_limits,
-            check=False,
-        )
-    else:
-        assert False
+        ).evaluator().set_description("vel cbf ish")
 
-    # HACK - how to fix this?
-    # vd_limits = vd_limits.make_valid()
-
-    if vd_limits.any_finite():
-        vd_min, vd_max = vd_limits
+    if plant_limits.vd.any_finite():
+        vd_min, vd_max = plant_limits.vd
         prog.AddLinearConstraint(
             Avd,
             vd_min - bvd,
@@ -683,8 +629,7 @@ def add_plant_limits_to_qp(
             vd_vars,
         ).evaluator().set_description("accel")
 
-    # - Torque.
-    if u_vars is not None and plant_limits.u.any_finite():
+    if plant_limits.u.any_finite():
         u_min, u_max = plant_limits.u
         prog.AddLinearConstraint(
             Au,
@@ -962,7 +907,6 @@ class QpWithDirConstraint(BaseController):
 
         X, V, Jt, Jtdot_v = pose_actual
         Mt, Mtinv, Jt, Jtbar, Nt_T = reproject_mass(Minv, Jt)
-        # Nt = Nt_T.T
 
         # Compute spatial feedback.
         kp_t, kd_t = self.gains.task
@@ -978,30 +922,23 @@ class QpWithDirConstraint(BaseController):
         # Compute posture feedback.
         kp_p, kd_p = self.gains.posture
         e_p = q - q0
-        # e_p_dir = vec_dot_norm(e_p, Nt @ e_p)
-        # e_p *= e_p_dir  # From OSC hacking.
         ed_p = v
         edd_p_c = -kp_p * e_p - kd_p * ed_p
 
-        num_t = 6
-
         # *very* sloppy looking
-        # scale_A_t = np.eye(num_t)
-
+        scale_A_t = np.eye(num_t)
         # # better, but may need relaxation
         # scale_A_t = np.ones((num_t, 1))
-
         # can seem "loose" towards end of traj for rotation
         # (small feedback -> scale a lot). relaxing only necessary for
         # implicit version.
-        scale_A_t = np.array([
-            [1, 1, 1, 0, 0, 0],
-            [0, 0, 0, 1, 1, 1],
-        ]).T
+        # scale_A_t = np.array([
+        #     [1, 1, 1, 0, 0, 0],
+        #     [0, 0, 0, 1, 1, 1],
+        # ]).T
 
         num_scales_t = scale_A_t.shape[1]
         scale_vars_t = prog.NewContinuousVariables(num_scales_t, "scale_t")
-        desired_scales_t = np.ones(num_scales_t)
 
         scale_A_p = np.ones((num_v, 1))
         # scale_A_p = np.eye(num_v)
@@ -1014,7 +951,7 @@ class QpWithDirConstraint(BaseController):
         # Primary, scale.
         u_vars = scale_vars_t
         Au_t = proj_t @ np.diag(edd_t_c) @ scale_A_t
-        bu_t = -proj_t @ Jtdot_v + H
+        bu_t = -proj_t @ Jtdot_v
 
         u_vars = np.concatenate([u_vars, scale_vars_p])
         Au_p = proj_p @ np.diag(edd_p_c) @ scale_A_p
@@ -1028,10 +965,8 @@ class QpWithDirConstraint(BaseController):
         bvd = Minv @ (bu - H)
 
         # Add limits.
-        vd_limits = self.plant_limits.vd
-        limit_info = add_plant_limits_to_qp(
+        add_plant_limits_to_qp(
             plant_limits=self.plant_limits,
-            vd_limits=vd_limits,
             dt=self.acceleration_bounds_dt,
             q=q,
             v=v,
@@ -1045,14 +980,14 @@ class QpWithDirConstraint(BaseController):
         )
 
         # Optimize towards scale=1.
+        desired_scales_t = np.ones(num_scales_t)
+        desired_scales_p = np.ones(num_scales_p)
         add_2norm_decoupled(
             prog,
             np.ones(num_scales_t),
             desired_scales_t,
             scale_vars_t,
         )
-
-        desired_scales_p = np.ones(num_scales_p)
         add_2norm_decoupled(
             prog,
             np.ones(num_scales_p),
@@ -1061,19 +996,11 @@ class QpWithDirConstraint(BaseController):
         )
 
         # Solve.
-        try:
-            # TODO(eric.cousineau): OSQP does not currently accept
-            # warm-starting:
-            # https://github.com/RobotLocomotion/drake/blob/v1.15.0/solvers/osqp_solver.cc#L335-L336
-            result = solve_or_die(
-                self.solver, self.solver_options, prog, x0=self.prev_sol
-            )
-        except RuntimeError:
-            raise
+        result = solve_or_die(
+            self.solver, self.solver_options, prog, x0=self.prev_sol
+        )
 
         tol = 1e-5
-        scale_t = result.GetSolution(scale_vars_t)
-        scale_p = result.GetSolution(scale_vars_p)
 
         infeas = result.GetInfeasibleConstraintNames(prog, tol=tol)
         infeas_text = "\n" + indent("\n".join(infeas), "  ")
@@ -1089,6 +1016,8 @@ class QpWithDirConstraint(BaseController):
 
         edd_c_p_null = Minv @ Nt_T @ M @ edd_p_c
         _, sigmas, _ = np.linalg.svd(Jt)
+        scale_t = result.GetSolution(scale_vars_t)
+        scale_p = result.GetSolution(scale_vars_p)
 
         if self.should_save:
             self.ts.append(t)
@@ -1101,7 +1030,7 @@ class QpWithDirConstraint(BaseController):
             self.edd_ps.append(edd_p_c)
             self.edd_ps_null.append(edd_c_p_null)
             self.s_ps.append(scale_p)
-            self.limits_infos.append(limit_info)
+            # self.limits_infos.append(limit_info)
             self.sigmas.append(sigmas)
 
         return tau
