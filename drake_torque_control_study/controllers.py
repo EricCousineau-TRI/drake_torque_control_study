@@ -696,6 +696,8 @@ class QpWithCosts(BaseController):
         zv = np.zeros(self.num_q)
         prog = MathematicalProgram()
 
+        # TODO(eric.cousineau): Switch this to explicit formulation.
+
         vd_star = prog.NewContinuousVariables(self.num_q, "vd_star")
         u_star = prog.NewContinuousVariables(self.num_q, "u_star")
 
