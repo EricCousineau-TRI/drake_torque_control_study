@@ -48,3 +48,9 @@ mv ${pydrake_dir} ${pydrake_dir}_old
 ln -s ~/.local/opt/drake/v1.19.0/lib/python3.10/site-packages/pydrake ${pydrake_dir}
 ln -s ~/.local/opt/drake/v1.19.0/share/drake ${fhs_dir}/share/
 ```
+
+## Drake Versions
+
+- `v1.17.0` - Snopt works on aggressive singularity cases
+- `v1.18.0` - Snopt fails towards end of singuarlity + rotation case
+- `v1.19.0` - Snopt fails similar to OSQP
