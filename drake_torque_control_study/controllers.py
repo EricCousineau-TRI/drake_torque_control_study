@@ -965,7 +965,7 @@ class QpWithDirConstraint(BaseController):
 
         X, V, Jt, Jtdot_v = pose_actual
         Mt, Mtinv, Jt, Jtbar, Nt_T = reproject_mass(Minv, Jt)
-        Nt = Nt_T.T
+        # Nt = Nt_T.T
 
         # Compute spatial feedback.
         kp_t, kd_t = self.gains.task
@@ -981,8 +981,8 @@ class QpWithDirConstraint(BaseController):
         # Compute posture feedback.
         kp_p, kd_p = self.gains.posture
         e_p = q - q0
-        e_p_dir = vec_dot_norm(e_p, Nt @ e_p)
-        e_p *= e_p_dir  # From OSC hacking.
+        # e_p_dir = vec_dot_norm(e_p, Nt @ e_p)
+        # e_p *= e_p_dir  # From OSC hacking.
         ed_p = v
         edd_p_c = -kp_p * e_p - kd_p * ed_p
 
