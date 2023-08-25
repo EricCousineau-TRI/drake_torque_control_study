@@ -1150,7 +1150,7 @@ class QpWithDirConstraint(BaseController):
             bu=bu,
         )
 
-        add_manip_cbf = True
+        add_manip_cbf = False
 
         if add_manip_cbf:
             # mu_min = 0.005
@@ -1183,7 +1183,7 @@ class QpWithDirConstraint(BaseController):
             Amu = Jmu @ Avd
             bmu = (
                 -Jmudot_v
-                # -Jmu @ bvd
+                -Jmu @ bvd
                 -kmu_1 * amu_1(h_mu)
                 -kmu_2 * amu_2(hd_mu)
             )

@@ -280,7 +280,7 @@ def make_panda_limits(plant):
     # plant_limits.q.upper[3] = np.deg2rad(-20.0)  # vibrates, locks
     # plant_limits.q.upper[3] = np.deg2rad(-25.0)  # vibrates
     # plant_limits.q.upper[3] = np.deg2rad(-30.0)
-    # plant_limits.q.upper[3] = np.deg2rad(-35.0)  # near singular value=0.01
+    plant_limits.q.upper[3] = np.deg2rad(-35.0)  # near singular value=0.01
     # plant_limits.q.upper[3] = np.deg2rad(-45.0)
     # plant_limits.q.lower[6] = np.deg2rad(-30.0)
     # plant_limits.q.upper[6] = np.deg2rad(30.0)
