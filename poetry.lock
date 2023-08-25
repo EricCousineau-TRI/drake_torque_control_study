@@ -565,18 +565,18 @@ files = [
 
 [[package]]
 name = "drake"
-version = "1.16.0"
+version = "1.17.0"
 description = "Model-based design and verification for robotics"
 category = "main"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "drake-1.16.0-cp310-cp310-manylinux_2_31_x86_64.whl", hash = "sha256:89b1af755f00abd6ca51feaddfec76a3186f8598b64c238865df291e677ad6b9"},
-    {file = "drake-1.16.0-cp311-cp311-macosx_12_0_arm64.whl", hash = "sha256:f38bed6fc6a40aa27a46f8b65532e34e5efd3e8a91f6b23ba4e9bd78104cfdfa"},
-    {file = "drake-1.16.0-cp311-cp311-macosx_12_0_x86_64.whl", hash = "sha256:76fef54f1ec98ff135984748354bc5ef29057e6102e5c5eeb39fadac1fb807c6"},
-    {file = "drake-1.16.0-cp311-cp311-manylinux_2_31_x86_64.whl", hash = "sha256:5abae6608962cabc1e4f48e0470973c4b2eddf3be38344be4dacba8c15780014"},
-    {file = "drake-1.16.0-cp38-cp38-manylinux_2_31_x86_64.whl", hash = "sha256:1cfad58c4925c55140b80765470e7dfb448a718527ec0c3fc365afa6e78bd47d"},
-    {file = "drake-1.16.0-cp39-cp39-manylinux_2_31_x86_64.whl", hash = "sha256:80f34472ab209e86a3ce9aec4e3509bd24f3a98fb36a6d8aee5ce619dec0c92b"},
+    {file = "drake-1.17.0-cp310-cp310-manylinux_2_31_x86_64.whl", hash = "sha256:3d76708984e4fdf6f1c850bcd0e3c3ef925d04060d1c98615a4c4932a991d92a"},
+    {file = "drake-1.17.0-cp311-cp311-macosx_12_0_arm64.whl", hash = "sha256:59a6effe3ef14418a9a95ec5aeb54a03d07725a5834aaecf33b6c468af78a5b3"},
+    {file = "drake-1.17.0-cp311-cp311-macosx_12_0_x86_64.whl", hash = "sha256:8b828373646ab88eb3da84eddbd93e3712d0b7d92a68b72259637b41e68f7146"},
+    {file = "drake-1.17.0-cp311-cp311-manylinux_2_31_x86_64.whl", hash = "sha256:827dd28de5760a57ce0841d2a1815a1ba456bfe31da792cf8f91a89e631f0a72"},
+    {file = "drake-1.17.0-cp38-cp38-manylinux_2_31_x86_64.whl", hash = "sha256:945de9dbd37480a29d01181a54930d0a52a6ef30624dd2241f060cf20c012b29"},
+    {file = "drake-1.17.0-cp39-cp39-manylinux_2_31_x86_64.whl", hash = "sha256:7678d4d3ea4a7266bb432ab152b49fb09e4a3dce0cab3ff4a4cdec9213586f79"},
 ]
 
 [package.dependencies]
@@ -2692,4 +2692,4 @@ test = ["mypy", "pre-commit", "pytest", "pytest-asyncio", "websockets (>=10.0)"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<3.12"  # for scipy
-content-hash = "ecdacdf7c9b5788fb7411b0e777523adc85ed0946c0cb4bc76fe688ca7b0e26c"
+content-hash = "b90e505a1c220c9d624c6ded33100f0cef5d7d89d17ed71d09b7c82eb8d6a093"
